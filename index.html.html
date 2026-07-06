@@ -1,0 +1,1004 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Goal Judge — Motion Replay</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Archivo:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0E1216; --surface:#1A2129; --surface-2:#232C36;
+    --chalk:#F2F4F1; --chalk-dim:#9AA6B0;
+    --tape:#FFC53D; --goal:#2BE06B; --alert:#FF4D3D;
+    --radius:14px;
+    --display:'Archivo Black', 'Arial Black', sans-serif;
+    --body:'Archivo', system-ui, sans-serif;
+  }
+  *{box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent;}
+  html,body{height:100%; overscroll-behavior:none;}
+  body{background:var(--bg); color:var(--chalk); font-family:var(--body);
+    display:flex; flex-direction:column; height:100dvh; user-select:none;}
+  header{display:flex; align-items:center; justify-content:space-between; padding:10px 14px; gap:10px; flex:0 0 auto;}
+  .brand{display:flex; align-items:baseline; gap:8px;}
+  .wordmark{font-family:var(--display); font-size:17px; letter-spacing:.06em; line-height:1;}
+  .wordmark span{color:var(--goal);}
+  .ver{font-size:10px; font-weight:700; letter-spacing:.12em; color:#FF3EA5;
+    border:1px solid #FF3EA5; border-radius:4px; padding:2px 5px;}
+  .scorepill{font-family:var(--display); font-size:15px; background:var(--surface);
+    border:1px solid var(--surface-2); border-radius:999px; padding:7px 14px;
+    display:flex; gap:8px; align-items:center;}
+  .scorepill b{color:var(--goal); font-size:18px; line-height:1;}
+  #status{flex:0 0 auto; margin:0 14px 8px; padding:10px 12px;
+    background:var(--surface); border-left:3px solid var(--tape); border-radius:6px;
+    font-size:13.5px; font-weight:500; min-height:40px;
+    display:flex; align-items:center; gap:8px;}
+  #status.armed{border-left-color:var(--goal);}
+  .dot{width:8px; height:8px; border-radius:50%; background:var(--tape); flex:0 0 auto;}
+  #status.armed .dot{background:var(--goal); animation:pulse 1.2s infinite;}
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.25;}}
+  #stage{position:relative; flex:1 1 auto; margin:0 14px; min-height:0;
+    background:#000; border-radius:var(--radius); overflow:hidden;
+    border:1px solid var(--surface-2);}
+  video{position:absolute; inset:0; width:100%; height:100%; object-fit:contain;}
+  #overlay{position:absolute; inset:0; width:100%; height:100%;}
+  #stage .placeholder{position:absolute; inset:0; display:flex; flex-direction:column; gap:10px;
+    align-items:center; justify-content:center; color:var(--chalk-dim);
+    font-size:14px; text-align:center; padding:24px;}
+  .placeholder .big{font-family:var(--display); font-size:22px; color:var(--chalk); letter-spacing:.04em;}
+  #recPill{position:absolute; left:10px; top:10px; z-index:5; display:none;
+    align-items:center; gap:6px; background:rgba(14,18,22,.72); border-radius:999px;
+    padding:5px 10px 5px 8px; font-size:11px; font-weight:700; letter-spacing:.08em;}
+  #recPill.on{display:flex;}
+  #recPill .rdot{width:8px; height:8px; border-radius:50%; background:var(--alert); animation:pulse 1.2s infinite;}
+  footer{flex:0 0 auto; padding:10px 14px calc(12px + env(safe-area-inset-bottom)); display:flex; flex-direction:column; gap:10px;}
+  .row{display:flex; gap:10px;}
+  button{font-family:var(--body); font-weight:700; font-size:15px; letter-spacing:.02em;
+    border:none; border-radius:var(--radius); padding:14px 12px; flex:1;
+    background:var(--surface-2); color:var(--chalk); cursor:pointer;}
+  button:active{transform:scale(.985);}
+  button.primary{background:var(--goal); color:#06280F;}
+  button.warn{background:transparent; color:var(--alert); border:1px solid var(--alert); flex:0 0 auto; padding:14px 16px;}
+  button:disabled{opacity:.35;}
+  #replaysTab{display:none;}
+  #replaysTab summary b{color:var(--goal);}
+  .replays-body{padding:2px 14px 12px; display:flex; flex-direction:column; gap:10px;}
+  .replay-sec{display:flex; flex-direction:column; gap:5px;}
+  .replay-sec-head{font-size:10px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--chalk-dim);}
+  .replay-row{display:flex; gap:8px; overflow-x:auto; padding-bottom:2px; -webkit-overflow-scrolling:touch;}
+  #replayStrip{display:flex; flex-direction:column; gap:10px;}
+  .replay-card{flex:0 0 auto; width:132px; background:#000; cursor:pointer;
+    border:1px solid var(--surface-2); border-radius:10px; overflow:hidden;}
+  .replay-card.goal{border-color:var(--goal);}
+  .replay-card.near{border-color:var(--tape);}
+  .replay-card.reject{border-color:#5A6675;}
+  .replay-thumb{height:74px; display:flex; align-items:center; justify-content:center;
+    font-size:26px; color:#06280F;}
+  .replay-card.goal .replay-thumb{background:var(--goal);}
+  .replay-card.near .replay-thumb{background:var(--tape); color:#3A2A00;}
+  .replay-card.reject .replay-thumb{background:#39424E; color:var(--chalk-dim);}
+  .replay-bar{display:flex; justify-content:space-between; align-items:center; padding:5px 8px; background:var(--surface);}
+  .replay-bar span{font-size:11px; font-weight:700;}
+  .replay-dl{font-size:11px; font-weight:700; color:var(--goal); text-decoration:none;
+    border:1px solid var(--goal); border-radius:6px; padding:2px 8px;}
+  .replay-card.near .replay-dl{color:var(--tape); border-color:var(--tape);}
+  .replay-card.reject .replay-dl{color:var(--chalk-dim); border-color:#5A6675;}
+  .linkbtn{align-self:flex-start; background:none; color:var(--chalk-dim); border:none;
+    padding:2px 4px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.1em; width:auto;}
+  details{background:var(--surface); border-radius:var(--radius); border:1px solid var(--surface-2);}
+  summary{padding:12px 14px; font-size:13px; font-weight:700; color:var(--chalk-dim); cursor:pointer; letter-spacing:.05em; text-transform:uppercase;}
+  .settings{padding:2px 14px 14px; display:flex; flex-direction:column; gap:12px;}
+  .setting label{display:flex; justify-content:space-between; font-size:13px; color:var(--chalk-dim); margin-bottom:5px;}
+  .setting label output{color:var(--chalk); font-weight:700;}
+  input[type=range]{width:100%; accent-color:var(--tape);}
+  .toggle{display:flex; justify-content:space-between; align-items:center; font-size:13px; color:var(--chalk-dim);}
+  .toggle input{width:20px; height:20px; accent-color:var(--goal);}
+  #evidence{position:absolute; right:10px; top:10px; width:104px; border-radius:10px; overflow:hidden;
+    border:2px solid var(--goal); display:none; z-index:5; background:#000;}
+  #evidence canvas{display:block; width:100%;}
+  #evidence .tag{font-family:var(--display); font-size:9px; letter-spacing:.1em; text-align:center;
+    background:var(--goal); color:#06280F; padding:3px 0;}
+  #goalFlash{position:fixed; inset:0; z-index:50; display:none;
+    align-items:center; justify-content:center; flex-direction:column; gap:6px;}
+  #goalFlash.show{display:flex;}
+  #goalFlash.goal{background:var(--goal);}
+  #goalFlash.near{background:var(--tape);}
+  #goalFlash .word{font-family:var(--display); font-size:min(26vw,170px); line-height:.9;
+    color:#06280F; letter-spacing:.02em;}
+  #goalFlash.near .word{color:#3A2A00;}
+  #goalFlash .sub{font-weight:700; letter-spacing:.22em; font-size:13px; color:#06280F;}
+  #goalFlash.near .sub{color:#3A2A00;}
+  /* dismissible replay viewer */
+  #viewer{position:fixed; inset:0; z-index:60; display:none;
+    align-items:center; justify-content:center; background:rgba(6,10,14,.9); padding:20px;}
+  #viewer.show{display:flex;}
+  #viewer video{max-width:94vw; max-height:78vh; width:auto; border-radius:12px; background:#000;
+    box-shadow:0 12px 40px rgba(0,0,0,.6);}
+  #viewerClose{position:absolute; top:calc(12px + env(safe-area-inset-top)); right:14px;
+    width:44px; height:44px; flex:0 0 auto; border-radius:50%; font-size:20px; line-height:1;
+    background:var(--surface); color:var(--chalk); border:1px solid var(--surface-2);}
+  @media (prefers-reduced-motion: reduce){
+    #goalFlash.show{animation:none;}
+    #status.armed .dot{animation:none;}
+    #recPill .rdot{animation:none;}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="wordmark">GOAL<span>JUDGE</span></div>
+    <div class="ver">V15 · SHOT FILTER</div>
+  </div>
+  <div class="scorepill">GOALS <b id="score">0</b></div>
+</header>
+
+<div id="status"><span class="dot"></span><span id="statusText">No tape or markers needed. Mount the phone steady, aim at the goal, then tap Start camera.</span></div>
+
+<div id="stage">
+  <video id="video" playsinline muted></video>
+  <canvas id="overlay"></canvas>
+  <div id="recPill"><span class="rdot"></span><span>BUFFERING</span></div>
+  <div class="placeholder" id="placeholder">
+    <div class="big">CAMERA OFF</div>
+    <div>Finds the ball by motion + round shape — the ball stays<br>exactly as it is. Keep the phone still on a stand; a shaky<br>camera or busy background makes motion harder to read.</div>
+  </div>
+  <div id="evidence"><canvas id="evidenceCanvas"></canvas><div class="tag">LAST GOAL</div></div>
+</div>
+
+<footer>
+  <div class="row">
+    <button class="primary" id="mainBtn">Start camera</button>
+    <button class="warn" id="resetBtn" disabled>Reset</button>
+  </div>
+
+  <details id="replaysTab">
+    <summary>Replays · <b id="replayCount">0</b></summary>
+    <div class="replays-body">
+      <div id="replayStrip"></div>
+      <button id="clearReplays" class="linkbtn">Clear all</button>
+    </div>
+  </details>
+
+  <details>
+    <summary>Detection settings</summary>
+    <div class="settings">
+      <div class="setting">
+        <label>Motion sensitivity <output id="motionOut">6</output></label>
+        <input type="range" id="motion" min="1" max="10" value="6">
+      </div>
+      <div class="setting">
+        <label>Ball size (% of goal width) <output id="sizeOut">12%</output></label>
+        <input type="range" id="size" min="4" max="30" value="12">
+      </div>
+      <div class="setting">
+        <label>Ball-shape strictness <output id="shapeOut">4</output></label>
+        <input type="range" id="shape" min="1" max="10" value="4">
+      </div>
+      <div class="setting">
+        <label>Shot speed (rules out people) <output id="shotOut">5</output></label>
+        <input type="range" id="shot" min="1" max="10" value="5">
+      </div>
+      <div class="toggle">
+        <span>Show what the camera detects (debug)</span>
+        <input type="checkbox" id="debug">
+      </div>
+      <div class="toggle">
+        <span>Sound on goal</span>
+        <input type="checkbox" id="sound" checked>
+      </div>
+    </div>
+  </details>
+</footer>
+
+<div id="goalFlash"><div class="word" id="goalWord">GOAL</div><div class="sub" id="goalSub">REPLAY SAVED</div></div>
+
+<div id="viewer">
+  <button id="viewerClose" aria-label="Close replay">&#10005;</button>
+  <video id="viewerVideo" controls playsinline></video>
+</div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const video=$('video'), overlay=$('overlay'), stage=$('stage'), placeholder=$('placeholder');
+  const statusEl=$('status'), statusText=$('statusText');
+  const mainBtn=$('mainBtn'), resetBtn=$('resetBtn'), scoreEl=$('score');
+  const goalFlash=$('goalFlash'), goalWord=$('goalWord'), goalSub=$('goalSub');
+  const viewer=$('viewer'), viewerVideo=$('viewerVideo'), viewerClose=$('viewerClose');
+  const evidence=$('evidence'), evidenceCanvas=$('evidenceCanvas');
+  const recPill=$('recPill');
+  const replaysTab=$('replaysTab'), replayStrip=$('replayStrip'), replayCount=$('replayCount'), clearReplays=$('clearReplays');
+  const motionIn=$('motion'), motionOut=$('motionOut');
+  const sizeIn=$('size'), sizeOut=$('sizeOut');
+  const shapeIn=$('shape'), shapeOut=$('shapeOut');
+  const shotIn=$('shot'), shotOut=$('shotOut');
+  const debugIn=$('debug'), soundIn=$('sound');
+  const octx = overlay.getContext('2d');
+
+  const proc = document.createElement('canvas');
+  const pctx = proc.getContext('2d', { willReadFrequently: true });
+  const PROC_W = 200;
+
+  // idle -> corners -> bg (learn background plate) -> armed (watch + record)
+  let state='idle';
+  let corners=[], insetCorners=[], bufferCorners=[];
+  let score=0;
+  let track=null, bestBlob=null, debugMask=null, hist=[];
+  let bgReady=0;
+
+  // zone-verdict state (goal vs near-miss ring); detection never sleeps, so a
+  // false positive followed by a real goal both fire
+  let zonePrev='out', goalStreak=0, armedForGoal=false, nmWatch=null, goalDebounceUntil=0;
+
+  // ---- detection tuning ----
+  const COAST=12;            // frames the ball may vanish (blur/stop) before we drop the track
+  const INSET=0.06;          // shrink the goal polygon this much for the goal line
+  const SETTLE_MS=350;       // wait this long before judging (catches an instant rebound-in)
+  const GOAL_FRAMES=2;       // consecutive in-goal frames to confirm a goal
+  const NM_MIN_FRAMES=3;     // min ring-dwell frames for a near-miss (rejects a quick fly-by)
+  const GOAL_DEBOUNCE=400;   // block only duplicate goal fires within this many ms (not longer)
+  // human filter: a real shot is fast, travels a smooth line, and doesn't loom (grow) on
+  // approach. People fail one of these even when a body part is ball-sized and moving.
+  const SHOT_WINDOW=10;      // frames before entry to analyse
+  const STRAIGHT_MIN=0.80;   // net displacement / path length; a ball's path is nearly straight
+  const SIZE_CV_MAX=0.38;    // max diameter variation (std/mean); a looming person grows
+  let minShotSpeed=0;        // px/sec, set from the Shot speed slider at arm/setShotSpeed
+  const BG_FRAMES=30;        // frames averaged to build the background plate
+  const BG_ALPHA=0.02;       // background adaptation rate while armed
+  const GLOBAL_CHANGE=0.55;  // fraction of frame moving that means "lights/bump", not a ball
+  const MIN_SIZE=6;          // ignore motion specks smaller than this (proc px)
+  const BLUR_ASPECT_MAX=6.0; // while tracking, tolerate this much blur-elongation
+  const DILATE_ITERS=2;      // reconnect edge-only / fragmented ball motion into one blob
+  let motionThresh=23;       // grayscale diff threshold (from sensitivity slider)
+  let fillMin=0.38, aspectMax=4.3;  // acquisition shape gate (set by shapeParams)
+  // size band: reject blobs far from the expected ball size (kills person-sized blobs).
+  // expected diameter is a fraction of the goal's width, so it needs no extra calibration.
+  let ballFrac=0.12, dMin=3, dMax=1e9;
+  // region of interest: only motion inside a padded box around the goal is considered,
+  // so clutter elsewhere in the room is ignored entirely
+  let roi=null;
+
+  // ---- rolling replay buffer ----
+  const BUFFER_MS=5000, TAIL_MS=2000, CHUNK_MS=250, MAX_CLIPS=40;
+  let rec=null, recMime='video/webm', segChunks=[], rotTimer=0;
+  let capturing=false, pendingSave=false, recOK=false;
+  let clips=[], clipCount=0;
+  let viewerOpen=false, flashTimer=0, pendingSaveKind='goal';
+
+  // reusable buffers
+  let bufN=0, maskBuf=null, dilBuf=null, labelBuf=null, stackBuf=null, grayBuf=null, bgBuf=null;
+  function ensureBuffers(N){
+    if (bufN===N) return;
+    bufN=N;
+    maskBuf=new Uint8Array(N); dilBuf=new Uint8Array(N);
+    labelBuf=new Int32Array(N); stackBuf=new Int32Array(N);
+    grayBuf=new Float32Array(N); bgBuf=new Float32Array(N);
+  }
+
+  motionIn.oninput=()=>{ motionOut.textContent=motionIn.value; setMotionThresh(); };
+  sizeIn.oninput=()=>{ sizeOut.textContent=sizeIn.value+'%'; ballFrac=+sizeIn.value/100; setSizeBand(); if(state==='armed') computeZones(); };
+  shapeIn.oninput=()=>{ shapeOut.textContent=shapeIn.value; shapeParams(); };
+  shotIn.oninput=()=>{ shotOut.textContent=shotIn.value; setShotSpeed(); };
+  function setShotSpeed(){
+    // slider 1..10 -> 0.3 .. 1.8 frame-widths per second required across the approach
+    const wps = 0.3 + (+shotIn.value-1)/9*1.5;
+    minShotSpeed = wps * (video.videoWidth||1280);
+  }
+  function setMotionThresh(){ const s=+motionIn.value; motionThresh=40-(s-1)/9*30; } // 40..10
+  function shapeParams(){
+    const s=+shapeIn.value;                 // 1..10, higher = stricter
+    fillMin  = 0.30 + (s-1)/9*0.25;         // 0.30 .. 0.55
+    aspectMax = 5.0 - (s-1)/9*2.0;          // 5.0 .. 3.0
+  }
+  // expected ball diameter (proc px) = ballFrac * goal width; band is generous
+  // because motion blobs are noisy — the point is only to rule out person-sized blobs
+  function setSizeBand(){
+    if (corners.length<4 || !video.videoWidth){ dMin=3; dMax=1e9; return; }
+    const kx=video.videoWidth/PROC_W;
+    let mnx=Infinity, mxx=-Infinity;
+    corners.forEach(p=>{ if(p.x<mnx)mnx=p.x; if(p.x>mxx)mxx=p.x; });
+    const goalWproc=Math.max(mxx-mnx,1)/kx;     // goal width in proc px
+    const exp=ballFrac*goalWproc;
+    dMin=Math.max(3, exp*0.40);
+    dMax=exp*2.2;
+  }
+  // padded box around the near-miss boundary (or goal), in proc px
+  function setROI(){
+    const poly = bufferCorners.length>=4 ? bufferCorners : corners;
+    if (poly.length<4 || !video.videoWidth){ roi=null; return; }
+    const ph=Math.round(PROC_W*video.videoHeight/video.videoWidth);
+    const sx=PROC_W/video.videoWidth, sy=ph/video.videoHeight;
+    let mnx=Infinity,mxx=-Infinity,mny=Infinity,mxy=-Infinity;
+    poly.forEach(p=>{ const px=p.x*sx, py=p.y*sy;
+      if(px<mnx)mnx=px; if(px>mxx)mxx=px; if(py<mny)mny=py; if(py>mxy)mxy=py; });
+    const m=0.25*Math.max(mxx-mnx, mxy-mny);   // small extra margin for the approach
+    roi={ x0:Math.max(0,Math.floor(mnx-m)), y0:Math.max(0,Math.floor(mny-m)),
+          x1:Math.min(PROC_W,Math.ceil(mxx+m)), y1:Math.min(ph,Math.ceil(mxy+m)) };
+  }
+  setMotionThresh(); shapeParams(); setShotSpeed();
+
+  function setStatus(msg, armed=false){
+    statusText.textContent=msg;
+    statusEl.classList.toggle('armed', armed);
+  }
+
+  // ---------- camera ----------
+  function inIframe(){ try{ return window.self!==window.top; }catch(e){ return true; } }
+
+  async function startCamera(){
+    // Safari fails silently (no prompt) when the page isn't a secure context or the API is
+    // missing — surface exactly what's wrong instead of dying quietly.
+    const hasAPI = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+    if (!window.isSecureContext || !hasAPI){
+      setStatus('Camera needs a secure page. Open this over https:// (or localhost) — not as a downloaded file:// file. On iPhone, host it (e.g. GitHub Pages) and open the https link in Safari.');
+      return;
+    }
+    if (inIframe()){
+      setStatus('The camera is blocked inside this embedded preview. Open the page in its own Safari/Chrome tab, then tap Start camera again.');
+      return;
+    }
+    try{
+      const stream=await navigator.mediaDevices.getUserMedia({
+        video:{ facingMode:'environment', width:{ideal:1280}, height:{ideal:720} }, audio:false
+      });
+      video.srcObject=stream;
+      await video.play();
+      placeholder.style.display='none';
+      resetBtn.disabled=false;
+      if (navigator.wakeLock) navigator.wakeLock.request('screen').catch(()=>{});
+      initRecorder(stream);
+      state='corners'; corners=[];
+      mainBtn.textContent='Tap the 4 goal corners on screen';
+      mainBtn.disabled=true;
+      setStatus('Step 1 — tap the 4 corners of the goal on the wall, in any order. (0 of 4)');
+      loop();
+    }catch(err){
+      let msg;
+      if (err.name==='NotAllowedError' || err.name==='SecurityError')
+        msg='Camera permission was denied. In Safari tap the “aA” in the address bar → Website Settings → Camera → Allow (or Settings ▸ Safari ▸ Camera), then reload and try again.';
+      else if (err.name==='NotFoundError' || err.name==='OverconstrainedError')
+        msg='No usable camera was found on this device.';
+      else if (err.name==='NotReadableError')
+        msg='The camera is busy in another app. Close that app and try again.';
+      else
+        msg='Camera error: '+err.name+(err.message?' — '+err.message:'')+'. Make sure the page is on https:// and camera access is allowed.';
+      setStatus(msg);
+    }
+  }
+
+  // ---------- coord mapping ----------
+  function fitBox(){
+    const dw=stage.clientWidth, dh=stage.clientHeight;
+    const vw=video.videoWidth||1, vh=video.videoHeight||1;
+    const s=Math.min(dw/vw, dh/vh);
+    return { s, ox:(dw-vw*s)/2, oy:(dh-vh*s)/2 };
+  }
+  const toVideo=(cx,cy)=>{ const r=stage.getBoundingClientRect(), f=fitBox();
+    return { x:(cx-r.left-f.ox)/f.s, y:(cy-r.top-f.oy)/f.s }; };
+  const toDisplay=p=>{ const f=fitBox(); return { x:p.x*f.s+f.ox, y:p.y*f.s+f.oy }; };
+
+  // ---------- taps ----------
+  stage.addEventListener('pointerdown', e=>{
+    if (state==='corners'){
+      corners.push(toVideo(e.clientX, e.clientY));
+      if (corners.length<4){
+        setStatus(`Step 1 — tap the 4 corners of the goal. (${corners.length} of 4)`);
+      } else {
+        corners=orderCorners(corners);
+        bufferCorners=[];
+        state='nearcorners';
+        setStatus('Step 2 — tap the 4 corners of the near-miss boundary (a bit outside the goal). A ball that lands between the two counts as a close call. (0 of 4)');
+      }
+    } else if (state==='nearcorners'){
+      bufferCorners.push(toVideo(e.clientX, e.clientY));
+      if (bufferCorners.length<4){
+        setStatus(`Step 2 — tap the 4 corners of the near-miss boundary. (${bufferCorners.length} of 4)`);
+      } else {
+        bufferCorners=orderCorners(bufferCorners);
+        startBg();
+      }
+    }
+  });
+
+  function orderCorners(pts){
+    const cx=pts.reduce((a,p)=>a+p.x,0)/4, cy=pts.reduce((a,p)=>a+p.y,0)/4;
+    return pts.slice().sort((a,b)=>Math.atan2(a.y-cy,a.x-cx)-Math.atan2(b.y-cy,b.x-cx));
+  }
+  function computeInset(){
+    if (corners.length<3){ insetCorners=corners.slice(); return; }
+    const cx=corners.reduce((a,p)=>a+p.x,0)/corners.length;
+    const cy=corners.reduce((a,p)=>a+p.y,0)/corners.length;
+    insetCorners=corners.map(p=>({ x:p.x+(cx-p.x)*INSET, y:p.y+(cy-p.y)*INSET }));
+  }
+  // goal line only; the near-miss outer boundary (bufferCorners) is drawn by the user
+  function computeZones(){
+    computeInset();
+  }
+  function pointInPoly(x,y,poly){
+    let inside=false;
+    for (let i=0,j=poly.length-1;i<poly.length;j=i++){
+      const xi=poly[i].x, yi=poly[i].y, xj=poly[j].x, yj=poly[j].y;
+      if (((yi>y)!==(yj>y)) && (x < (xj-xi)*(y-yi)/(yj-yi)+xi)) inside=true;
+    }
+    return inside;
+  }
+
+  // ---------- background learning ----------
+  function startBg(){
+    bgReady=0;
+    state='bg';
+    mainBtn.textContent='Learning background…';
+    mainBtn.disabled=true;
+    setStatus('Keep the goal area clear and hold the phone still — learning the empty scene so it can spot the moving ball.');
+  }
+  function arm(){
+    track=null; hist=[];
+    zonePrev='out'; goalStreak=0; armedForGoal=false; nmWatch=null; goalDebounceUntil=0;
+    computeZones(); shapeParams(); setSizeBand(); setROI(); setShotSpeed();
+    state='armed';
+    mainBtn.textContent='Watching the goal…';
+    mainBtn.disabled=true;
+    chime();
+    const note = recOK
+      ? ' Every goal saves a ~'+(BUFFER_MS/1000)+'s replay in the strip below.'
+      : ' \u26A0 This browser can\u2019t record clips, so goals will flash but not save video.';
+    setStatus('ARMED. Play on — a goal flashes automatically.'+note, true);
+  }
+
+  // remove pixels that have fewer than 2 set neighbours — kills isolated speckle and
+  // thin 1px noise (shadows, compression) while keeping solid clusters like the ball
+  function denoise(src, dst, W, H){
+    const N=W*H;
+    for (let i=0;i<N;i++){
+      if (!src[i]){ dst[i]=0; continue; }
+      const x=i%W; let n=0;
+      if (x>0   && src[i-1]) n++;
+      if (x<W-1 && src[i+1]) n++;
+      if (i>=W  && src[i-W]) n++;
+      if (i<N-W && src[i+W]) n++;
+      dst[i] = n>=2 ? 1 : 0;
+    }
+  }
+
+  // grow the mask by one pixel in each direction; closes the hollow-ring / fragmented
+  // motion a uniform ball produces, so its blob is solid and its size isn't undercounted
+  function dilate(src, dst, W, H){
+    const N=W*H;
+    for (let i=0;i<N;i++){
+      let on=src[i];
+      if (!on){
+        const x=i%W;
+        if      (x>0     && src[i-1]) on=1;
+        else if (x<W-1   && src[i+1]) on=1;
+        else if (i>=W    && src[i-W]) on=1;
+        else if (i<N-W   && src[i+W]) on=1;
+      }
+      dst[i]=on;
+    }
+  }
+
+  // ---------- connected-components on a binary mask ----------
+  function labelBlobs(mask, W, H){
+    const N=W*H, label=labelBuf, stack=stackBuf;
+    label.fill(0);
+    const blobs=[]; let next=1;
+    for (let i=0;i<N;i++){
+      if (!mask[i] || label[i]) continue;
+      let top=0; stack[top++]=i; label[i]=next;
+      let size=0, sx=0, sy=0, minX=W, maxX=0, minY=H, maxY=0;
+      while (top>0){
+        const p=stack[--top];
+        const px=p%W, py=(p/W)|0;
+        size++; sx+=px; sy+=py;
+        if (px<minX)minX=px; if (px>maxX)maxX=px;
+        if (py<minY)minY=py; if (py>maxY)maxY=py;
+        if (px>0     && mask[p-1] && !label[p-1]){ label[p-1]=next; stack[top++]=p-1; }
+        if (px<W-1   && mask[p+1] && !label[p+1]){ label[p+1]=next; stack[top++]=p+1; }
+        if (py>0     && mask[p-W] && !label[p-W]){ label[p-W]=next; stack[top++]=p-W; }
+        if (py<H-1   && mask[p+W] && !label[p+W]){ label[p+W]=next; stack[top++]=p+W; }
+      }
+      next++;
+      blobs.push({ size, cx:sx/size, cy:sy/size, minX, maxX, minY, maxY,
+                   diam: Math.max(maxX-minX, maxY-minY)+1 });
+    }
+    return blobs;
+  }
+
+  // ---------- per-frame ----------
+  function detect(){
+    if (!video.videoWidth) return;
+    proc.width=PROC_W;
+    proc.height=Math.round(PROC_W*video.videoHeight/video.videoWidth);
+    const W=proc.width, H=proc.height, N=W*H;
+    ensureBuffers(N);
+    pctx.drawImage(video,0,0,W,H);
+    const d=pctx.getImageData(0,0,W,H).data;
+    const gray=grayBuf;
+    for (let i=0;i<N;i++){ const j=i*4; gray[i]=d[j]*0.299+d[j+1]*0.587+d[j+2]*0.114; }
+    bestBlob=null; if (!debugIn.checked) debugMask=null;
+
+    // build the background plate
+    if (state==='bg'){
+      if (bgReady===0) bgBuf.set(gray);
+      else for (let i=0;i<N;i++) bgBuf[i]+=(gray[i]-bgBuf[i])/(bgReady+1);
+      bgReady++;
+      if (bgReady>=BG_FRAMES) arm();
+      return;
+    }
+
+    if (state!=='armed') return;
+
+    // motion mask, but ONLY inside the region of interest around the goal —
+    // this ignores all the moving clutter elsewhere in the room
+    const mask=maskBuf; mask.fill(0);
+    const rx0=roi?roi.x0:0, ry0=roi?roi.y0:0, rx1=roi?roi.x1:W, ry1=roi?roi.y1:H;
+    let moved=0, roiArea=0;
+    for (let y=ry0; y<ry1; y++){
+      const row=y*W;
+      for (let x=rx0; x<rx1; x++){
+        const i=row+x; roiArea++;
+        const m = Math.abs(gray[i]-bgBuf[i])>motionThresh ? 1 : 0;
+        mask[i]=m; moved+=m;
+      }
+    }
+    // whole-ROI change (lights flip / camera bump / someone standing in the goal): skip
+    if (moved > (roiArea||N)*GLOBAL_CHANGE){
+      for (let i=0;i<N;i++) bgBuf[i]+=(gray[i]-bgBuf[i])*0.25;
+      if (track){ track.missed=(track.missed||0)+1;
+        if (track.missed>COAST){ track=null; goalStreak=0; nmWatch=null; zonePrev='out'; } }
+      debugMask = debugIn.checked ? {mask,W,H} : null;
+      return;
+    }
+    // adapt the plate slowly to gradual lighting drift
+    for (let i=0;i<N;i++) bgBuf[i]+=(gray[i]-bgBuf[i])*BG_ALPHA;
+
+    // 1) drop isolated speckle noise, then 2) reconnect the ball's edge-motion into a solid blob
+    denoise(mask, dilBuf, W, H); mask.set(dilBuf);
+    for (let it=0; it<DILATE_ITERS; it++){
+      dilate(mask, dilBuf, W, H);
+      mask.set(dilBuf);
+    }
+    const blobs=labelBlobs(mask, W, H);
+    debugMask = debugIn.checked ? {mask,W,H} : null;
+    const kx=video.videoWidth/W, ky=video.videoHeight/H;
+    const now=performance.now();
+
+    // acquire with a strict round-shape + size gate; maintain a lock more loosely
+    // (blur-tolerant, wider size band, but still bounded so it can't jump to a person)
+    const haveTrack = track && track.missed<COAST;
+    const cands=blobs.filter(b=>{
+      if (b.size<MIN_SIZE) return false;
+      const w=b.maxX-b.minX+1, h=b.maxY-b.minY+1;
+      const fill=b.size/(w*h);
+      const aspect=Math.max(w,h)/Math.min(w,h);
+      if (haveTrack){
+        return b.diam>=dMin*0.5 && b.diam<=dMax*1.4 && aspect<=BLUR_ASPECT_MAX && fill>=0.30;
+      }
+      return b.diam>=dMin && b.diam<=dMax && fill>=fillMin && aspect<=aspectMax;
+    });
+
+    let chosen=null;
+    if (haveTrack && cands.length){
+      let predX=track.x, predY=track.y;
+      if (track.vx!=null){ const dt=Math.min(0.1,(now-track.t)/1000); predX+=track.vx*dt; predY+=track.vy*dt; }
+      cands.sort((a,b)=>((a.cx*kx-predX)**2+(a.cy*ky-predY)**2)-((b.cx*kx-predX)**2+(b.cy*ky-predY)**2));
+      chosen=cands[0];
+    } else if (cands.length){
+      chosen=cands.sort((a,b)=>b.size-a.size)[0];
+    }
+
+    if (chosen){
+      const bx=chosen.cx*kx, by=chosen.cy*ky;
+      const prevX=track?track.x:bx, prevY=track?track.y:by, prevT=track?track.t:now;
+      if (track && track.missed<COAST){ track.x=track.x*0.35+bx*0.65; track.y=track.y*0.35+by*0.65; }
+      else track={x:bx,y:by};
+      const dt=(now-prevT)/1000;
+      if (dt>0){ track.vx=(track.x-prevX)/dt; track.vy=(track.y-prevY)/dt; }
+      track.t=now;
+      track.bbox=[chosen.minX*kx,chosen.minY*ky,(chosen.maxX-chosen.minX+1)*kx,(chosen.maxY-chosen.minY+1)*ky];
+      track.missed=0;
+      track.rad=Math.max(chosen.maxX-chosen.minX, chosen.maxY-chosen.minY)*kx/2;
+
+      hist.push({x:bx,y:by,t:now,d:chosen.diam}); if (hist.length>24) hist.shift();
+
+      // which zone is the ball in? goal (inside the inset line), ring (near-miss buffer), or out
+      let z='out';
+      if (pointInPoly(track.x,track.y,insetCorners)) z='goal';
+      else if (pointInPoly(track.x,track.y,bufferCorners)) z='ring';
+
+      // GOAL: the ball must have been outside the goal (armedForGoal), then read inside for a
+      // couple of frames. Detection NEVER sleeps — only *leaving* the goal re-arms it, so a
+      // false positive and then a real goal both fire; a ball resting in-goal can't re-fire.
+      if (z!=='goal') armedForGoal=true;
+      if (z==='goal') goalStreak++; else goalStreak=0;
+      if (goalStreak>=GOAL_FRAMES && armedForGoal && now>goalDebounceUntil){
+        goalDebounceUntil=now+GOAL_DEBOUNCE; armedForGoal=false; nmWatch=null;
+        if (evaluateShot().pass) goalVerdict(); else rejectedVerdict();
+      }
+
+      // NEAR-MISS: opens when the ball enters the ring from outside; if it settles there
+      // (didn't reach the goal, didn't just breeze through) after SETTLE_MS, it's "just wide"
+      if (z==='ring'){
+        if (!nmWatch && zonePrev==='out') nmWatch={ startAt:now, frames:0 };
+        if (nmWatch){
+          nmWatch.frames++;
+          if (now-nmWatch.startAt>=SETTLE_MS){
+            if (nmWatch.frames>=NM_MIN_FRAMES){ if (evaluateShot().pass) nearMissVerdict(); else rejectedVerdict(); }
+            nmWatch=null;
+          }
+        }
+      } else if (nmWatch && z==='out'){
+        nmWatch=null;                          // left the ring back outside = a fly-by, ignore
+      }
+
+      zonePrev=z;
+      bestBlob={x:track.x,y:track.y,bbox:track.bbox,coast:false,rad:track.rad,zone:z};
+    } else if (track){
+      track.missed=(track.missed||0)+1;
+      if (track.missed>COAST){
+        // ball vanished (hit the wall and stopped, or left frame) — resolve what was pending
+        if (goalStreak>=1 && armedForGoal && now>goalDebounceUntil){
+          goalDebounceUntil=now+GOAL_DEBOUNCE; armedForGoal=false;
+          if (evaluateShot().pass) goalVerdict(); else rejectedVerdict();
+        } else if (nmWatch && nmWatch.frames>=NM_MIN_FRAMES){
+          if (evaluateShot().pass) nearMissVerdict(); else rejectedVerdict();
+        }
+        track=null; goalStreak=0; nmWatch=null; zonePrev='out';
+      } else {
+        bestBlob={x:track.x,y:track.y,bbox:track.bbox,coast:true,rad:track.rad,zone:zonePrev};
+      }
+    } else { goalStreak=0; nmWatch=null; }
+  }
+
+  // is this entry a real shot, or a person? judged over the frames just before entry.
+  // fast + straight path + steady size = ball. Too little data -> don't reject (fast rocket).
+  function evaluateShot(){
+    const n=hist.length;
+    const W=Math.min(SHOT_WINDOW, n);
+    if (W<3) return { pass:true, few:true };
+    const seg=hist.slice(n-W);
+    let speeds=[], pathLen=0;
+    for (let i=1;i<seg.length;i++){
+      const dx=seg[i].x-seg[i-1].x, dy=seg[i].y-seg[i-1].y;
+      const dt=(seg[i].t-seg[i-1].t)/1000 || 1e-3;
+      const len=Math.hypot(dx,dy); pathLen+=len; speeds.push(len/dt);
+    }
+    speeds.sort((a,b)=>a-b);
+    const medSpeed=speeds[speeds.length>>1] || 0;
+    const net=Math.hypot(seg[seg.length-1].x-seg[0].x, seg[seg.length-1].y-seg[0].y);
+    const straight = pathLen>0 ? net/pathLen : 0;
+    const ds=seg.map(s=>s.d).filter(v=>v>0);
+    let sizeCv=0;
+    if (ds.length>=2){
+      const m=ds.reduce((a,b)=>a+b,0)/ds.length;
+      const v=ds.reduce((a,b)=>a+(b-m)*(b-m),0)/ds.length;
+      sizeCv=Math.sqrt(v)/(m||1);
+    }
+    const speedOK=medSpeed>=minShotSpeed;
+    const straightOK=straight>=STRAIGHT_MIN;
+    const sizeOK=sizeCv<=SIZE_CV_MAX;
+    return { pass: speedOK&&straightOK&&sizeOK, speedOK, straightOK, sizeOK, medSpeed, straight, sizeCv };
+  }
+
+  function goalVerdict(){
+    score++; scoreEl.textContent=score;
+    snapEvidence();
+    saveReplay('goal');
+    flashScreen('goal');
+    if (soundIn.checked && !viewerOpen) horn();
+  }
+  function nearMissVerdict(){
+    saveReplay('near');                        // saved for review, but not scored
+    flashScreen('near');
+    if (soundIn.checked && !viewerOpen) buzz();
+  }
+  // failed the human filter: not a shot. Saved to its own category, no score, no flash.
+  function rejectedVerdict(){
+    saveReplay('reject');
+  }
+  // full-screen flash for LIVE events only; suppressed while a replay is open so it
+  // never strobes over the clip you're watching
+  function flashScreen(kind){
+    if (viewerOpen) return;
+    goalFlash.className='';
+    goalFlash.classList.add('show', kind);
+    goalWord.textContent = kind==='goal' ? 'GOAL' : 'NO GOAL';
+    goalSub.textContent  = kind==='goal' ? 'REPLAY SAVED' : 'CLOSE \u00B7 REPLAY SAVED';
+    clearTimeout(flashTimer);
+    flashTimer=setTimeout(()=>goalFlash.classList.remove('show'), 1000);
+  }
+
+  function snapEvidence(){
+    if (!video.videoWidth) return;
+    evidenceCanvas.width=video.videoWidth;
+    evidenceCanvas.height=video.videoHeight;
+    const ec=evidenceCanvas.getContext('2d');
+    ec.drawImage(video,0,0);
+    ec.strokeStyle='#2BE06B'; ec.lineWidth=6;
+    ec.beginPath();
+    corners.forEach((p,i)=> i?ec.lineTo(p.x,p.y):ec.moveTo(p.x,p.y));
+    ec.closePath(); ec.stroke();
+    if (track){
+      ec.strokeStyle='#FF3EA5'; ec.lineWidth=5;
+      ec.strokeRect(track.bbox[0],track.bbox[1],track.bbox[2],track.bbox[3]);
+    }
+    evidence.style.display='block';
+  }
+
+  // ---------- rolling replay recorder ----------
+  function pickMime(){
+    const cands=['video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm','video/mp4'];
+    for (const m of cands){ try{ if (window.MediaRecorder && MediaRecorder.isTypeSupported(m)) return m; }catch(e){} }
+    return '';
+  }
+  function initRecorder(stream){
+    recOK=false;
+    if (!window.MediaRecorder) return;
+    recMime=pickMime();
+    startSegment(stream);
+    recOK=!!rec;
+    recPill.classList.toggle('on', recOK);
+  }
+  // record whole segments (each starts with a valid file header) and rotate them;
+  // a goal saves one entire segment, always playable — never a spliced fragment.
+  function startSegment(stream){
+    try{ rec = recMime ? new MediaRecorder(stream,{mimeType:recMime}) : new MediaRecorder(stream); }
+    catch(e){ rec=null; return; }
+    segChunks=[];
+    rec.ondataavailable=e=>{ if (e.data && e.data.size) segChunks.push(e.data); };
+    rec.onstop=()=>{
+      if (pendingSave){ finalizeClip(); pendingSave=false; }
+      const s=video.srcObject;
+      if (s && state!=='idle') startSegment(s);
+    };
+    try{ rec.start(CHUNK_MS); }catch(e){ rec=null; return; }
+    clearTimeout(rotTimer);
+    rotTimer=setTimeout(()=>{ if (!capturing && rec && rec.state==='recording') rec.stop(); }, BUFFER_MS);
+  }
+  function saveReplay(kind){
+    if (!rec) return;
+    if (capturing) return;
+    pendingSaveKind = kind || 'goal';
+    capturing=true; pendingSave=true;
+    clearTimeout(rotTimer);
+    setTimeout(()=>{
+      if (rec && rec.state==='recording') rec.stop();
+      else { finalizeClip(); pendingSave=false; if (video.srcObject) startSegment(video.srcObject); }
+    }, TAIL_MS);
+  }
+  function finalizeClip(){
+    capturing=false;
+    if (!segChunks.length) return;
+    const blob=new Blob(segChunks,{type:recMime||'video/webm'});
+    const url=URL.createObjectURL(blob);
+    clips.unshift({ url, n:++clipCount, kind:pendingSaveKind });
+    while (clips.length>MAX_CLIPS){ const old=clips.pop(); URL.revokeObjectURL(old.url); }
+    renderClips();
+  }
+  function renderClips(){
+    if (!clips.length){ replaysTab.style.display='none'; return; }
+    replaysTab.style.display='block';
+    replayCount.textContent=clips.length;
+    replayStrip.innerHTML='';
+    const groups=[
+      ['goal','Goals'],
+      ['near','Close calls'],
+      ['reject','Filtered (not a shot)']
+    ];
+    groups.forEach(([kind,title])=>{
+      const list=clips.filter(c=>c.kind===kind);
+      if (!list.length) return;
+      const sec=document.createElement('div'); sec.className='replay-sec';
+      const head=document.createElement('div'); head.className='replay-sec-head'; head.textContent=title+' · '+list.length;
+      const strip=document.createElement('div'); strip.className='replay-row';
+      list.forEach(c=>{
+        const card=document.createElement('div'); card.className='replay-card '+kind;
+        const thumb=document.createElement('div'); thumb.className='replay-thumb'; thumb.textContent='\u25B6';
+        const bar=document.createElement('div'); bar.className='replay-bar';
+        const lbl=document.createElement('span');
+        lbl.textContent=(kind==='goal'?'Goal ':kind==='near'?'Close ':'Filtered ')+c.n;
+        const dl=document.createElement('a'); dl.className='replay-dl';
+        dl.textContent='Save'; dl.href=c.url;
+        dl.download=(kind==='goal'?'goal-':kind==='near'?'close-':'filtered-')+c.n+'.webm';
+        dl.addEventListener('click', e=>e.stopPropagation());
+        bar.appendChild(lbl); bar.appendChild(dl);
+        card.appendChild(thumb); card.appendChild(bar);
+        card.addEventListener('click', ()=>openViewer(c.url));
+        strip.appendChild(card);
+      });
+      sec.appendChild(head); sec.appendChild(strip);
+      replayStrip.appendChild(sec);
+    });
+  }
+  clearReplays.addEventListener('click', ()=>{
+    clips.forEach(c=>URL.revokeObjectURL(c.url));
+    clips=[]; renderClips();
+  });
+
+  // ---------- replay viewer (dismissible) ----------
+  function openViewer(url){
+    viewerVideo.src=url; viewerOpen=true;
+    viewer.classList.add('show');
+    viewerVideo.currentTime=0;
+    viewerVideo.play().catch(()=>{});
+  }
+  function closeViewer(){
+    viewerOpen=false;
+    viewer.classList.remove('show');
+    viewerVideo.pause();
+    viewerVideo.removeAttribute('src'); viewerVideo.load();
+  }
+  viewerClose.addEventListener('click', closeViewer);
+  viewer.addEventListener('click', e=>{ if (e.target===viewer) closeViewer(); });
+  document.addEventListener('keydown', e=>{ if (e.key==='Escape' && viewerOpen) closeViewer(); });
+
+  // ---------- audio ----------
+  let actx=null;
+  // big blaring sustained hockey goal horn: stacked, slightly detuned saw partials
+  function horn(){
+    try{
+      actx=actx||new (window.AudioContext||window.webkitAudioContext)();
+      const t=actx.currentTime, DUR=1.5;
+      const master=actx.createGain();
+      master.gain.setValueAtTime(.0001,t);
+      master.gain.exponentialRampToValueAtTime(.42,t+.08);   // punchy attack
+      master.gain.setValueAtTime(.42,t+DUR-0.35);            // hold
+      master.gain.exponentialRampToValueAtTime(.0001,t+DUR); // release
+      master.connect(actx.destination);
+      const partials=[[110,.5],[165,.34],[220,.3],[330,.2],[55,.4]]; // fundamental+fifth+octaves
+      partials.forEach(([f,g])=>{
+        [-4,0,4].forEach(det=>{                              // 3 detuned voices each = blare
+          const o=actx.createOscillator(), gn=actx.createGain();
+          o.type='sawtooth'; o.frequency.value=f; o.detune.value=det + (Math.random()*3-1.5);
+          gn.gain.value=g*0.33;
+          o.connect(gn); gn.connect(master);
+          o.start(t); o.stop(t+DUR+0.05);
+        });
+      });
+    }catch(e){}
+  }
+  function chime(){
+    try{
+      actx=actx||new (window.AudioContext||window.webkitAudioContext)();
+      const t=actx.currentTime;
+      [[660,0],[880,.09]].forEach(([f,dt])=>{
+        const o=actx.createOscillator(), gn=actx.createGain();
+        o.type='sine'; o.frequency.value=f;
+        gn.gain.setValueAtTime(.0001,t+dt);
+        gn.gain.exponentialRampToValueAtTime(.2,t+dt+.02);
+        gn.gain.exponentialRampToValueAtTime(.0001,t+dt+.25);
+        o.connect(gn); gn.connect(actx.destination);
+        o.start(t+dt); o.stop(t+dt+.3);
+      });
+    }catch(e){}
+  }
+
+  function buzz(){
+    try{
+      actx=actx||new (window.AudioContext||window.webkitAudioContext)();
+      const t=actx.currentTime;
+      const o=actx.createOscillator(), gn=actx.createGain();
+      o.type='square'; o.frequency.setValueAtTime(196,t); o.frequency.exponentialRampToValueAtTime(140,t+.22);
+      gn.gain.setValueAtTime(.0001,t);
+      gn.gain.exponentialRampToValueAtTime(.16,t+.03);
+      gn.gain.exponentialRampToValueAtTime(.0001,t+.3);
+      o.connect(gn); gn.connect(actx.destination);
+      o.start(t); o.stop(t+.34);
+    }catch(e){}
+  }
+
+  // ---------- draw ----------
+  function draw(){
+    overlay.width=stage.clientWidth; overlay.height=stage.clientHeight;
+    octx.clearRect(0,0,overlay.width,overlay.height);
+    if (!video.videoWidth) return;
+    const f=fitBox();
+
+    // calibration: show the goal (step 1) and near-miss boundary (step 2) as they're placed
+    if (state!=='armed'){
+      if (corners.length){
+        octx.strokeStyle='#FFC53D'; octx.lineWidth=3; octx.setLineDash([8,6]);
+        octx.beginPath();
+        corners.forEach((p,i)=>{ const q=toDisplay(p); i?octx.lineTo(q.x,q.y):octx.moveTo(q.x,q.y); });
+        if (corners.length===4) octx.closePath();
+        octx.stroke(); octx.setLineDash([]);
+        octx.fillStyle='#FFC53D';
+        corners.forEach(p=>{ const q=toDisplay(p); octx.beginPath(); octx.arc(q.x,q.y,6,0,Math.PI*2); octx.fill(); });
+      }
+      if (bufferCorners.length){
+        octx.strokeStyle='rgba(255,197,61,.7)'; octx.lineWidth=2; octx.setLineDash([6,5]);
+        octx.beginPath();
+        bufferCorners.forEach((p,i)=>{ const q=toDisplay(p); i?octx.lineTo(q.x,q.y):octx.moveTo(q.x,q.y); });
+        if (bufferCorners.length===4) octx.closePath();
+        octx.stroke(); octx.setLineDash([]);
+        octx.fillStyle='rgba(255,197,61,.9)';
+        bufferCorners.forEach(p=>{ const q=toDisplay(p); octx.beginPath(); octx.arc(q.x,q.y,5,0,Math.PI*2); octx.fill(); });
+      }
+    }
+
+    // armed: filled near-miss band (amber) between the goal line (green) and the boundary
+    if (state==='armed' && bufferCorners.length===4 && insetCorners.length===4){
+      octx.beginPath();
+      bufferCorners.forEach((p,i)=>{ const q=toDisplay(p); i?octx.lineTo(q.x,q.y):octx.moveTo(q.x,q.y); });
+      octx.closePath();
+      insetCorners.forEach((p,i)=>{ const q=toDisplay(p); i?octx.lineTo(q.x,q.y):octx.moveTo(q.x,q.y); });
+      octx.closePath();
+      octx.fillStyle='rgba(255,197,61,.14)'; octx.fill('evenodd');
+      octx.strokeStyle='rgba(255,197,61,.55)'; octx.lineWidth=2;
+      octx.beginPath();
+      bufferCorners.forEach((p,i)=>{ const q=toDisplay(p); i?octx.lineTo(q.x,q.y):octx.moveTo(q.x,q.y); });
+      octx.closePath(); octx.stroke();
+      octx.strokeStyle='rgba(43,224,107,.9)';
+      octx.beginPath();
+      insetCorners.forEach((p,i)=>{ const q=toDisplay(p); i?octx.lineTo(q.x,q.y):octx.moveTo(q.x,q.y); });
+      octx.closePath(); octx.stroke();
+    }
+
+    if (state==='armed' && roi){
+      const sx=(video.videoWidth/PROC_W)*f.s, sy=(video.videoHeight/Math.round(PROC_W*video.videoHeight/video.videoWidth))*f.s;
+      octx.strokeStyle='rgba(154,166,176,.28)';
+      octx.lineWidth=1; octx.setLineDash([3,4]);
+      octx.strokeRect(roi.x0*sx+f.ox, roi.y0*sy+f.oy, (roi.x1-roi.x0)*sx, (roi.y1-roi.y0)*sy);
+      octx.setLineDash([]);
+    }
+
+    if (debugMask){
+      const {mask,W,H}=debugMask;
+      const kx=(video.videoWidth/W)*f.s, ky=(video.videoHeight/H)*f.s;
+      octx.fillStyle='rgba(255,62,165,.55)';
+      for (let i=0;i<mask.length;i++){
+        if (!mask[i]) continue;
+        octx.fillRect((i%W)*kx+f.ox, ((i/W)|0)*ky+f.oy, kx, ky);
+      }
+    }
+
+    if (state==='bg'){
+      octx.fillStyle='rgba(6,10,14,.5)';
+      octx.fillRect(0,0,overlay.width,overlay.height);
+      const p=Math.min(1,bgReady/BG_FRAMES);
+      const bw=Math.min(overlay.width*0.6,280), bx=(overlay.width-bw)/2, by=overlay.height/2;
+      octx.fillStyle='rgba(242,244,241,.18)'; octx.fillRect(bx,by,bw,6);
+      octx.fillStyle='#2BE06B'; octx.fillRect(bx,by,bw*p,6);
+      octx.textAlign='center';
+      octx.font="600 14px Archivo, sans-serif";
+      octx.fillStyle='rgba(242,244,241,.95)';
+      octx.fillText('Learning background — keep the goal clear, hold still', overlay.width/2, by-16);
+      octx.textAlign='start';
+    }
+
+    if (bestBlob && state==='armed'){
+      const q=toDisplay(bestBlob);
+      const rad=bestBlob.rad?bestBlob.rad*f.s+6
+        :(bestBlob.bbox?Math.max(bestBlob.bbox[2],bestBlob.bbox[3])*f.s*0.6+6:20);
+      const col = bestBlob.zone==='goal' ? '#2BE06B' : bestBlob.zone==='ring' ? '#FFC53D' : '#9AA6B0';
+      octx.strokeStyle=col;
+      octx.lineWidth=3;
+      if (bestBlob.coast) octx.setLineDash([6,5]);
+      octx.beginPath(); octx.arc(q.x,q.y,rad,0,Math.PI*2); octx.stroke();
+      octx.setLineDash([]);
+      octx.font='bold 12px Archivo, sans-serif';
+      octx.fillStyle=col;
+      octx.fillText(bestBlob.coast?'TRACKING':'BALL', q.x+rad+4, q.y);
+    }
+  }
+
+  function loop(){ detect(); draw(); requestAnimationFrame(loop); }
+
+  mainBtn.addEventListener('click', ()=>{
+    if (state==='idle') startCamera();
+  });
+  resetBtn.addEventListener('click', ()=>{
+    corners=[]; insetCorners=[]; bufferCorners=[]; track=null; bestBlob=null; hist=[];
+    zonePrev='out'; goalStreak=0; armedForGoal=false; nmWatch=null; bgReady=0;
+    evidence.style.display='none';
+    state='corners';
+    mainBtn.textContent='Tap the 4 goal corners on screen';
+    mainBtn.disabled=true;
+    setStatus('Recalibrating: Step 1 — tap the 4 corners of the goal. (0 of 4)');
+  });
+})();
+</script>
+</body>
+</html>
